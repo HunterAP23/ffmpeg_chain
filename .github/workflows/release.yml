@@ -48,7 +48,7 @@ jobs:
         fi
 
     - name: Download build artifacts
-      uses: dawidd6/action-download-artifact@v3
+      uses: dawidd6/action-download-artifact@v6
       with:
         workflow: build-and-test.yml
         run_id: ${{ inputs.build_run_id }}
