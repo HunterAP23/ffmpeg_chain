@@ -1,0 +1,165 @@
+name: Test and Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        psutil: ['with', 'without']
+
+    name: Python ${{ matrix.python-version }} (${{ matrix.psutil }} psutil)
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Create virtual environment and install dependencies
+      run: |
+        uv venv .venv
+        source .venv/bin/activate
+        if [ "${{ matrix.psutil }}" = "with" ]; then
+          uv pip install '.[psutil,dev]'
+        else
+          uv pip install '.[dev]'
+        fi
+
+    - name: Verify environment
+      run: |
+        source .venv/bin/activate
+        if [ "${{ matrix.psutil }}" = "with" ]; then
+          python -c "import psutil" || (echo "psutil should be installed but isn't" && exit 1)
+        else
+          ! python -c "import psutil" 2>/dev/null || (echo "psutil should not be installed but is" && exit 1)
+        fi
+
+    - name: Type checking
+      run: |
+        source .venv/bin/activate
+        mypy src tests
+
+    - name: Lint
+      run: |
+        source .venv/bin/activate
+        ruff check .
+
+    - name: Run tests
+      run: |
+        source .venv/bin/activate
+        if [ "${{ matrix.psutil }}" = "with" ]; then
+          pytest -v -m "psutil or not psutil"
+        else
+          pytest -v -m "not psutil"
+        fi
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-py${{ matrix.python-version }}-${{ matrix.psutil }}-psutil
+        path: |
+          .pytest_cache
+          test-reports/
+          pytest.xml
+        retention-days: 7
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        psutil: ['with', 'without']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install build dependencies
+      run: |
+        uv venv .venv
+        source .venv/bin/activate
+        if [ "${{ matrix.psutil }}" = "with" ]; then
+          uv pip install build '.[psutil]'
+        else
+          uv pip install build
+        fi
+
+    - name: Build package
+      run: |
+        source .venv/bin/activate
+        python -m build --wheel
+
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-py${{ matrix.python-version }}-${{ matrix.psutil }}-psutil
+        path: dist/*.whl
+        retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all wheels
+      uses: actions/download-artifact@v4
+      with:
+        pattern: wheel-*
+        path: dist
+        merge-multiple: true
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*.whl
+        generate_release_notes: true
+
+    - name: Set up Python for PyPI release
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install twine
+      run: pip install twine
+
+    - name: Upload to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      run: twine upload --skip-existing dist/*.whl
