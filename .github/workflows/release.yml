@@ -1,0 +1,99 @@
+name: Release
+
+# Only allow manual triggers
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Build workflow run ID to get artifacts from'
+        required: true
+        type: string
+      version_tag:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+        type: string
+        pattern: '^v\d+\.\d+\.\d+$'
+
+# Ensure this workflow can only be triggered by users with write access
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  preflight-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for required permissions
+        run: |
+          if [[ "${{ github.actor }}" != "${{ github.repository_owner }}" && "${{ github.event.sender.type }}" != "User" ]]; then
+            echo "Error: This workflow can only be run by repository owners or users with write access"
+            exit 1
+          fi
+
+  release:
+    needs: preflight-check
+    runs-on: ubuntu-latest
+    environment: production  # Requires manual approval in GitHub
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history to verify tags
+
+    - name: Verify tag doesn't exist
+      run: |
+        if git rev-parse "${{ inputs.version_tag }}" >/dev/null 2>&1; then
+          echo "Error: Tag ${{ inputs.version_tag }} already exists"
+          exit 1
+        fi
+
+    - name: Download build artifacts
+      uses: dawidd6/action-download-artifact@v3
+      with:
+        workflow: build-and-test.yml
+        run_id: ${{ inputs.build_run_id }}
+        pattern: wheel-*
+        path: dist
+        merge_multiple: true
+
+    - name: Verify version tag matches wheels
+      run: |
+        VERSION="${{ inputs.version_tag }}"
+        VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix
+        
+        # Check if all wheel files contain the version number
+        for wheel in dist/*.whl; do
+          if [[ ! "$wheel" =~ "$VERSION_NO_V" ]]; then
+            echo "Error: Wheel file $wheel does not match version $VERSION"
+            exit 1
+          fi
+        done
+        
+        # Check if we have wheels for all Python versions and psutil configurations
+        expected_count=10  # 5 Python versions * 2 psutil configurations
+        actual_count=$(ls dist/*.whl | wc -l)
+        
+        if [ "$actual_count" -ne "$expected_count" ]; then
+          echo "Error: Expected $expected_count wheels, but found $actual_count"
+          echo "Missing wheel configurations:"
+          echo "Found wheels:"
+          ls -la dist/*.whl
+          exit 1
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ inputs.version_tag }}
+        files: dist/*.whl
+        generate_release_notes: true
+        draft: true  # Create as draft first
+
+    - name: pypi-publish
+      uses: pypa/gh-action-pypi-publish@v1.12.3
+      with:
+        packages-dir: dist/
+        print-hash: true
+        verify-metadata: true
+        skip-existing: true
+        verbose: true

@@ -1,4 +1,4 @@
-name: Test and Release
+name: Build and Test
 
 on:
   push:
@@ -84,8 +84,6 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
@@ -125,41 +123,3 @@ jobs:
         name: wheel-py${{ matrix.python-version }}-${{ matrix.psutil }}-psutil
         path: dist/*.whl
         retention-days: 7
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-      id-token: write
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download all wheels
-      uses: actions/download-artifact@v4
-      with:
-        pattern: wheel-*
-        path: dist
-        merge-multiple: true
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/*.whl
-        generate_release_notes: true
-
-    - name: Set up Python for PyPI release
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-
-    - name: Install twine
-      run: pip install twine
-
-    - name: Upload to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-      run: twine upload --skip-existing dist/*.whl
