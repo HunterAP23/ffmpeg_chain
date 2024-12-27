@@ -1,0 +1,2 @@
+include ffmpeg_chain/py.typed
+include ffmpeg_chain/core/py.typed
