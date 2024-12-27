@@ -34,7 +34,7 @@ jobs:
         linking-type: static
         github-token: ${{ github.server_url == 'https://github.com' && github.token || '' }}
     
-    - run: ffmpeg -i assets/standard-test.mp4 -c copy -f nul -
+    - run: ffmpeg -i assets/standard-test.mp4 -c copy -f null -
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
