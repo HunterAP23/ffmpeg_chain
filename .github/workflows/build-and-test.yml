@@ -78,11 +78,7 @@ jobs:
     - name: Run tests
       run: |
         source .venv/bin/activate
-        if [ "${{ matrix.psutil }}" = "true" ]; then
-          pytest -v -m "with psutil"
-        else
-          pytest -v -m "without psutil"
-        fi
+        pytest -v
 
     - name: Upload test results
       if: always()
