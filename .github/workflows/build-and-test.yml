@@ -97,7 +97,6 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
-        psutil: [true, false]
 
     steps:
     - uses: actions/checkout@v4
@@ -111,16 +110,6 @@ jobs:
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-    - name: Install build dependencies
-      run: |
-        uv venv .venv
-        source .venv/bin/activate
-        if [ "${{ matrix.psutil }}" = "true" ]; then
-          uv pip install build '.[psutil]'
-        else
-          uv pip install build
-        fi
 
     - name: Build package
       run: |
