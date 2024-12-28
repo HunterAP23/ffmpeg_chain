@@ -29,8 +29,8 @@ run_test_configuration() {
     local with_psutil=$2
     shift 2  # Remove version and with_psutil from arguments
     
-    local venv_name="pytest-py${version/./}-${with_psutil:+with}-${with_psutil:-without}-psutil"
-    echo -e "${YELLOW}Running tests with Python ${version} (${with_psutil:+with}-${with_psutil:-without} psutil) in venv ${venv_name}${NC}"
+    local venv_name="pytest-py${version/./}${with_psutil:+psutil}"
+    echo -e "${YELLOW}Running tests with Python ${version} ("pytest-py${version/./}${with_psutil:-psutil}") in venv ${venv_name}${NC}"
     echo "----------------------------------------"
     
     # Create virtual environment if it doesn't exist
@@ -82,11 +82,11 @@ run_test_configuration() {
     # Run tests using pytest directly in the activated environment
     echo -e "${BLUE}Running tests...${NC}"
     if pytest "$@"; then
-        echo -e "${GREEN}✓ Tests passed for Python ${version} (${with_psutil:+with}-${with_psutil:-without} psutil)${NC}"
+        echo -e "${GREEN}✓ Tests passed for Python ${version} ("pytest-py${version/./}${with_psutil:-psutil}")${NC}"
         local exit_code=0
     else
         local exit_code=$?
-        echo -e "${RED}✗ Tests failed for Python ${version} (${with_psutil:+with}-${with_psutil:-without} psutil)${NC}"
+        echo -e "${RED}✗ Tests failed for Python ${version} ("pytest-py${version/./}${with_psutil:-psutil}")${NC}"
     fi
 
     # Deactivate virtual environment
@@ -111,7 +111,7 @@ for version in "${versions[@]}"; do
     echo
 
     # Run tests with psutil
-    if ! run_test_configuration "$version" "yes" "$@"; then
+    if ! run_test_configuration "$version" "psutil" "$@"; then
         overall_success=false
     fi
     echo
